@@ -46,8 +46,8 @@ db_source   = the database to copy from
 db_dest     = the database to write to
 schema_name = the name of the schema to copy
 
--- if a matching schema EXISTS in the destination database, IT WILL BE DROPPED & REPLACED
 -- if the schema DOES NOT EXIST in the destination database, IT WILL BE CREATED
+-- if a matching table EXISTS in the destination database, IT WILL BE TRUNCATED
 """
 def wipe_and_duplicate_schema(
     _db_source: DBConnection, 
