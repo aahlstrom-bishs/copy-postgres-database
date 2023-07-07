@@ -214,7 +214,7 @@ class DBConnection:
         self.assert_editable_environment()
         try:
             if not (
-                self.wipe_schema(_schema_name) and
+                # self.wipe_schema(_schema_namae) and
                 self.create_schema_if_not_exists(_schema_name)
             ):
                 self.rollback_transaction()
