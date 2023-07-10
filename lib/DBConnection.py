@@ -22,6 +22,7 @@ class DBConnection:
         self.cursor.execute(_sql_command_string)
         
     def commit_transaction(self):
+        assert self.editable_environment()
         self.connection.commit()
 
     def rollback_transaction(self):
