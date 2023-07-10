@@ -135,7 +135,7 @@ class DBConnection:
 
 
 
-    def create_empty_duplicate_table(self, _db_source: "DBConnection", _schema_name: str, _table_name: str):
+    def create_empty_duplicate_table(self, _db_source: "DBConnection", _schema_name: str, _table_name: str, _truncate: bool = False):
         self.assert_editable_environment()
         try:
             self.create_schema_if_not_exists(_schema_name);
@@ -153,8 +153,9 @@ class DBConnection:
                 
                 column_definitions = ', '.join([f'"{col[0]}" {col[1]}' for col in column_names])
                 self.execute(f'CREATE TABLE {_schema_name}.{_table_name} ({column_definitions});')
-            # erase all data in the table
-            self.execute(f'TRUNCATE TABLE {_schema_name}.{_table_name};')
+            if (_truncate):
+                # erase all data in the table
+                self.execute(f'TRUNCATE TABLE {_schema_name}.{_table_name};')
             print(f"Table {_schema_name}.{_table_name} created successfully.")
             # commit transaction manually after this function is called.
             return True
@@ -164,10 +165,10 @@ class DBConnection:
         return False
 
 
-    def create_and_populate_duplicate_table(self, _db_source: "DBConnection", _schema_name: str, _table_name: str):
+    def create_and_populate_duplicate_table(self, _db_source: "DBConnection", _schema_name: str, _table_name: str, _truncate: bool = False):
         self.assert_editable_environment()
         try:    
-            if not self.create_empty_duplicate_table(_db_source, _schema_name, _table_name):
+            if not self.create_empty_duplicate_table(_db_source, _schema_name, _table_name, _truncate):
                 raise Exception("failed to create table")
             
             rows = _db_source.fetch_query(f'SELECT * FROM {_schema_name}.{_table_name};')
@@ -210,7 +211,7 @@ class DBConnection:
         return False
 
     # Copy tables and records from source to destination
-    def wipe_create_and_populate_duplicate_schema(self, db_source: "DBConnection", _schema_name: str):
+    def create_and_populate_duplicate_schema(self, db_source: "DBConnection", _schema_name: str, _truncate_tables: bool = False):
         self.assert_editable_environment()
         try:
             if not (
@@ -229,7 +230,7 @@ class DBConnection:
             for table in tables:
                 print("")
                 table_name = table[0]
-                self.create_and_populate_duplicate_table(db_source, _schema_name, table_name)
+                self.create_and_populate_duplicate_table(db_source, _schema_name, table_name, _truncate_tables)
             print(f"Database population completed successfully. : schema = {_schema_name}")
             return True
         except Exception as e:

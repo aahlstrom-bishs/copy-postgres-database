@@ -52,16 +52,19 @@ db_source   = the database to copy from
 db_dest     = the database to write to
 schema_name = the name of the schema to copy
 table_name  = the name of the table to copy 
+truncate_table = if true, the destination table will be truncated before copying
 
--- if a matching table EXISTS in the destination database, IT WILL BE TRUNCATED
--- if the table DOES NOT EXIST in the destination database, IT WILL BE CREATED
+-- if the table does not exist in the destination database, it will be created
+-- otherwise, the table will not be edited, and the records will be appended to the existing table
+-- this is of note because if the table already exists, the table structure must already match the source table
 """
 def duplicate_table(
-    source_db: DBConnection,
-    dest_db: DBConnection, # must be an editable environment
-    schema_name: str,
-    table_name: str
-)
+    db_source: DBConnection, 
+    db_dest: DBConnection, # must be an editable environment
+    schema_name: str, 
+    table_name: str,
+    truncate_table: bool = False
+):
 
 
 """
@@ -69,14 +72,17 @@ copies a single schema, including all tables & records contained within the sche
 db_source   = the database to copy from
 db_dest     = the database to write to
 schema_name = the name of the schema to copy
+truncate_tables = if true, all tables in the destination schema will be truncated before copying
 
--- if the schema DOES NOT EXIST in the destination database, IT WILL BE CREATED
--- if a matching table EXISTS in the destination database, IT WILL BE TRUNCATED
+-- if the schema &/or tables do not exist in the destination database, they will be created
+-- otherwise, existing tables will not be edited, and the records will be appended to the existing tables
+-- this is of note because if a table already exists, the table structure must already match the source table
 """
-def wipe_and_duplicate_schema(
-    source_db: DBConnection,
-    dest_db: DBConnection, # must be an editable environment
-    schema_name,
+def duplicate_schema(
+    db_source: DBConnection, 
+    db_dest: DBConnection, # must be an editable environment
+    schema_name: str,
+    truncate_tables: bool = False
 )
 ```
 
@@ -84,13 +90,14 @@ def wipe_and_duplicate_schema(
 ## Example Code
 ``` python
 UsefulFunctions.duplicate_table(
-    DBConnection(read_json_config('./secrets/db_config_dev.json')),
-    DBConnection(
+    db_source=DBConnection(read_json_config('./secrets/db_config_dev.json')),
+    db_dest=DBConnection(
         read_json_config('./secrets/db_config_localhost.json'), 
         editable_environment=True
     ),
-    'public', 
-    'inventory_forecast_store'
+    schema_name='public', 
+    table_name='inventory_forecast_store'
+    truncate_table=True
 )
 ```
 
