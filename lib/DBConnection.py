@@ -22,7 +22,7 @@ class DBConnection:
         self.cursor.execute(_sql_command_string)
         
     def commit_transaction(self):
-        assert self.editable_environment()
+        self.assert_editable_environment()
         self.connection.commit()
 
     def rollback_transaction(self):
@@ -139,7 +139,8 @@ class DBConnection:
     def create_empty_duplicate_table(self, _db_source: "DBConnection", _schema_name: str, _table_name: str, _truncate: bool = False):
         self.assert_editable_environment()
         try:
-            self.create_schema_if_not_exists(_schema_name);
+            if not self.check_if_schema_exists(_schema_name):
+                self.create_schema_if_not_exists(_schema_name); # permission denied for dev DB
             if not self.check_if_table_exists(_schema_name, _table_name):
                 # create table with same columns as source table
                 column_query = f"""
