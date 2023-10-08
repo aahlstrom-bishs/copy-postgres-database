@@ -1,5 +1,21 @@
 from DBConnection import DBConnection
 import time;
+from typing import List
+
+
+def flatten_list(lst):
+    return [
+        item 
+        for sublist 
+        in lst 
+            for item 
+            in (
+                flatten_list(sublist) 
+                if isinstance(sublist, list) 
+                else [sublist]
+            )
+    ]
+
 
 def prompt(message: str):
     print('awaiting confirmation: ')
@@ -67,9 +83,10 @@ def duplicate_schema(
     db_source: DBConnection, 
     db_dest: DBConnection, # must be an editable environment
     schema_name: str,
-    truncate_tables: bool = False
+    truncate_tables: bool = False,
+    filter_keywords: list = []
 ):
-    print('source:      ', db_source.get_database(), ' : ', db_source.get_host)
+    print('source:      ', db_source.get_database(), ' : ', db_source.get_host())
     print('destination: ', db_dest.get_database(), ' : ', db_dest.get_host())
     print('awaiting confirmation: ')
     _user_confirmation = prompt(f"{'TRUNCATE destination tables & ' if truncate_tables else ''}DUPLICATE the schema")
@@ -84,9 +101,11 @@ def duplicate_schema(
         db_dest.create_and_populate_duplicate_schema(
             db_source, 
             schema_name,
-            truncate_tables
+            truncate_tables,
+            filter_keywords
         )
     ):
         print("Database population completed successfully.")
     else:
         print("Database population failed")
+

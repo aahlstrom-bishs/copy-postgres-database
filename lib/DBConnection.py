@@ -1,6 +1,7 @@
 import psycopg2
 from urllib.parse import urlparse
 import json
+from typing import List, Tuple
 
 class DBConnection:
     def __init__(self, _config: dict, editable_environment: bool = False):
@@ -213,7 +214,13 @@ class DBConnection:
         return False
 
     # Copy tables and records from source to destination
-    def create_and_populate_duplicate_schema(self, db_source: "DBConnection", _schema_name: str, _truncate_tables: bool = False):
+    def create_and_populate_duplicate_schema(
+        self, 
+        db_source: "DBConnection", 
+        _schema_name: str, 
+        _truncate_tables: bool = False,
+        filter_keywords: list = []        
+    ):
         self.assert_editable_environment()
         try:
             if not (
@@ -229,10 +236,27 @@ class DBConnection:
                 FROM information_schema.tables
                 WHERE table_schema='{_schema_name}' AND table_type='BASE TABLE';
             """)
+            # fix me : this is just temporary to avoid losing time on tables that are already populated
+            dest_tables = self.fetch_query(f"""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema='{_schema_name}' AND table_type='BASE TABLE';
+            """)
+            dest_tables = [table[0] for table in dest_tables]
+            print('existing tables: ', dest_tables)
+
             for table in tables:
                 print("")
                 table_name = table[0]
-                self.create_and_populate_duplicate_table(db_source, _schema_name, table_name, _truncate_tables)
+                if table_name in dest_tables: # fix me : this is just temporary to avoid losing time on tables that are already populated
+                    print(f"  ? table '{_schema_name}.{table_name}' already exists")
+                    if any([keyword in table_name for keyword in filter_keywords]):
+                        print(f"  !! dropping table '{_schema_name}.{table_name}'")
+                        self.execute(f"DROP TABLE {_schema_name}.{table_name};")
+                elif any([keyword in table_name for keyword in filter_keywords]):
+                    print(f"  ? skipping table '{_schema_name}.{table_name}'")
+                else:
+                    self.create_and_populate_duplicate_table(db_source, _schema_name, table_name, _truncate_tables)
             print(f"Database population completed successfully. : schema = {_schema_name}")
             return True
         except Exception as e:
@@ -242,3 +266,127 @@ class DBConnection:
 
 
 
+
+    # ---------------------------------------------
+    # Reading DB
+    # ---------------------------------------------
+
+
+
+    
+    def to_dict(self, records: List[Tuple], list_column_names: List[str] = None):
+        col_names = list_column_names or [desc[0] for desc in self.cursor.description]
+        data = {}
+        for name in col_names:
+            data[name] = []
+        for record in records:
+            k = 0
+            while k < len(record):
+                data[col_names[k]].append(str(record[k]))
+                k += 1
+        return data
+    
+    def get_list_db_schemas(self):
+        results = self.fetch_query("""
+            SELECT nspname 
+            FROM pg_namespace 
+            WHERE nspname NOT LIKE 'pg_%' 
+            AND nspname != 'information_schema'
+        """)
+        names = [row[0] for row in results]
+        return names
+
+    def get_list_schema_tables(self, _schema_name: str):
+        results = self.fetch_query(f"""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema='{_schema_name}' AND table_type='BASE TABLE';
+        """)
+        names = [row[0] for row in results]
+        return names
+
+    def get_dict_table_columns(self, _schema_name: str, _table_name: str):
+        try:
+            _sql_query_string = f"""
+                SELECT column_name, data_type, udt_name
+                FROM information_schema.columns 
+                WHERE table_schema='{_schema_name}'
+                AND table_name='{_table_name}'
+            ;"""
+            result = self.fetch_query(_sql_query_string)
+            cols = {}
+            for col in result:
+                cols[col[0]] = col[2]
+            return cols
+        except Exception as e:
+            print(f"Failed to query table '{_schema_name}.{_table_name}' : \n    !! Error Message = '{str(e).strip()}'")
+        self.rollback_transaction()
+        return None
+
+    # Function to get all primary keys for a table
+    def get_list_primary_keys(self, _schema_name: str, _table_name: str):
+        try:
+            sql_query = f"""
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a 
+                    ON a.attrelid = i.indrelid 
+                    AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = '{_schema_name}.{_table_name}'::regclass 
+                AND i.indisprimary
+            """
+            result = self.fetch_query(sql_query)
+            primary_keys = [row[0] for row in result]
+            return primary_keys
+        except Exception as e:
+            print(f"  ! Failed to query primary keys for '{_schema_name}.{_table_name}' : \n" +
+                  f"    !! Error Message = '{str(e).strip()}'")
+        self.rollback_transaction()
+        return None
+    
+    # Function to get all foreign keys for a table
+    def get_list_formalized_foreign_keys(self, _schema_name: str, _table_name: str):
+        try:
+            sql_query = f"""
+                SELECT 
+                    conname
+                    , conrelid::regclass AS table_from
+                    , a1.attname AS column_from
+                    , confrelid::regclass AS table_to
+                    , a2.attname AS column_to
+                FROM pg_constraint
+                JOIN pg_attribute a1 
+                    ON a1.attnum = ANY(conkey) 
+                    AND a1.attrelid = conrelid
+                JOIN pg_attribute a2 
+                    ON a2.attnum = ANY(confkey) 
+                    AND a2.attrelid = confrelid
+                WHERE conrelid = '{_schema_name}.{_table_name}'::regclass 
+                AND contype = 'f'
+            """
+            result = self.fetch_query(sql_query)
+            foreign_keys = []
+            for row in result:
+                constraint_name, table_from, column_from, table_to, column_to = row
+                foreign_keys.append({
+                    'constraint_name': constraint_name,
+                    'table_from': table_from,
+                    'column_from': column_from,
+                    'table_to': table_to,
+                    'column_to': column_to
+                })
+            return foreign_keys
+        except Exception as e:
+            print(f"  ! Failed to query formalized foreign keys for '{_schema_name}.{_table_name}' : \n" +
+                  f"    !! Error Message = '{str(e).strip()}'")
+        self.rollback_transaction()
+        return None
+
+    def get_list_unformalized_foreign_keys(self, _schema_name: str, _table_name: str, fk_identifier: str = '_'):
+        columns = self.get_dict_table_columns(_schema_name, _table_name)
+        col_names = columns.keys()
+        fks = [key for key in col_names if fk_identifier in key]
+        return fks
+
+
+    
