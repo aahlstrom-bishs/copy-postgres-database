@@ -42,3 +42,6 @@ build/
 
 # Ignore generated files
 __generated__/
+
+outputs/*
+outputs/**/*
